@@ -10,6 +10,7 @@ synopsis:            Tiny web application framework for WAI.
 
 extra-source-files:
 - README.md
+- changelog.md
 
 # Metadata used when publishing your package
 
