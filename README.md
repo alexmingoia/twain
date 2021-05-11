@@ -1,10 +1,15 @@
 # Twain
 
-Twain is a tiny web application framework for WAI.
+[![Hackage](https://img.shields.io/hackage/v/twain.svg?style=flat)](http://hackage.haskell.org/package/twain)
+![BSD3 License](http://img.shields.io/badge/license-BSD3-brightgreen.svg)
 
-Twain provides routing, parameter parsing, and a reader-like monad for
-composing responses from an environment. Also provided are helpers for
-redirects, cookies, IO actions, and more.
+Twain is a tiny web application framework for [WAI](http://hackage.haskell.org/package/wai).
+
+- Simple routing with path captures.
+- Parameter parsing of cookies, path, query, and body.
+- Compose responses from an app environment using a reader-like monad.
+- Helpers for redirects, headers, status codes.
+- Routes decompose into WAI middleware.
 
 ```haskell
 import Web.Twain
@@ -15,10 +20,3 @@ main = do
     get "/" $ do
       send $ html "Hello, World!"
 ```
-
-## Prior Work
-
-Twain is heavily inspired by Scotty. Unlike Scotty, Twain does not use monad
-transformers. Instead of providing a monad transformer, the `TwainM` and
-`RouteM` monads are parametized by an environment, which can be accessed within
-routes. This results in a simpler API with better performance.
