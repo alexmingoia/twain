@@ -16,7 +16,9 @@ extra-source-files:
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description:         Tiny web application framework for WAI.
+description:         Twain is tiny web application framework for WAI. It
+  provides routing, parameter parsing, and a reader-like monad for composing
+  responses from an environment.
 
 dependencies:
 - aeson >= 1.4 && < 1.7

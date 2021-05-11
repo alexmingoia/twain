@@ -4,11 +4,12 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: d8ea58462a361da954b94d9b1658ef3761639e51d013a0ed0ab0b078b1fa6fc0
+-- hash: aefa1a76215fdc73c3be2e14cf4dd781f33535258598f0362f565f78ebcb5c84
 
 name:           twain
 version:        1.0.0.0
 synopsis:       Tiny web application framework for WAI.
+description:    Twain is tiny web application framework for WAI. It provides routing, parameter parsing, and a reader-like monad for composing responses from an environment.
 category:       Web
 homepage:       https://github.com/alexmingoia/twain#readme
 bug-reports:    https://github.com/alexmingoia/twain/issues
@@ -20,7 +21,6 @@ license-file:   LICENSE
 build-type:     Simple
 extra-source-files:
     README.md
-    ChangeLog.md
 
 source-repository head
   type: git
