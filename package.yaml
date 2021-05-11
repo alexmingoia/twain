@@ -10,14 +10,13 @@ synopsis:            Tiny web application framework for WAI.
 
 extra-source-files:
 - README.md
-- ChangeLog.md
 
 # Metadata used when publishing your package
 
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-# description:         Please see the README on GitHub at <https://github.com/alexmingoia/twain#readme>
+description:         Tiny web application framework for WAI.
 
 dependencies:
 - aeson >= 1.4 && < 1.7
