@@ -67,6 +67,10 @@ match method (MatchPath f) req
   | maybe True (requestMethod req ==) method = f req
   | otherwise = Nothing
 
+-- | Parse request body.
+--
+-- Use to customize `ParseRequestBodyOptions` before calls to `param`
+-- and `file`.
 parseBody :: ParseRequestBodyOptions -> RouteM e ([Param], [File BL.ByteString])
 parseBody opts = do
   s <- routeState

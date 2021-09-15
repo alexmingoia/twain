@@ -21,6 +21,7 @@ module Web.Twain
     param',
     paramMaybe,
     params,
+    parseBody,
     file,
     files,
     header,
