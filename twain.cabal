@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: dbf88566dffaf1448d9db5c109ba821470b4466bb001934f9c24cdebd362a6c6
+-- hash: 2617615a4a626b8f581c24b174f536c5185b3aee84eac7f5c0529e4f035e84d7
 
 name:           twain
 version:        1.0.1.0
@@ -43,6 +43,7 @@ library
     , case-insensitive ==1.2.*
     , cookie >=0.4 && <0.6
     , either ==5.0.*
+    , exceptions ==0.10.*
     , http-types ==0.12.*
     , text >=1.2.3 && <1.3
     , time >=1.8 && <1.9.9

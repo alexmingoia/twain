@@ -1,7 +1,8 @@
 module Web.Twain.Types where
 
-import Control.Exception (SomeException)
+import Control.Exception (SomeException, throwIO, try)
 import Control.Monad (ap)
+import Control.Monad.Catch hiding (throw, try)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Aeson as JSON
 import qualified Data.ByteString as B
@@ -93,6 +94,18 @@ instance Monad (RouteM e) where
 
 instance MonadIO (RouteM e) where
   liftIO act = RouteM $ \s -> act >>= \a -> return (Right (a, s))
+
+instance MonadThrow (RouteM e) where
+  throwM = liftIO . throwIO
+
+instance MonadCatch (RouteM e) where
+  catch (RouteM act) f = RouteM $ \s -> do
+    ea <- try (act s)
+    case ea of
+      Left e ->
+        let (RouteM h) = f e
+         in h s
+      Right a -> pure a
 
 type Param = (Text, Text)
 
