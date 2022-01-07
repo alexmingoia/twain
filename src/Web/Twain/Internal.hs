@@ -1,7 +1,7 @@
 module Web.Twain.Internal where
 
-import Control.Exception (throwIO)
 import Control.Monad (join)
+import Control.Monad.Catch (throwM)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.Aeson as JSON
 import qualified Data.ByteString as B
@@ -14,7 +14,7 @@ import Data.Text.Encoding
 import Network.HTTP.Types (Method, hCookie, status204, status400)
 import Network.Wai (Application, Middleware, Request, lazyRequestBody, queryString, requestHeaders, requestMethod, responseLBS)
 import Network.Wai.Handler.Warp (defaultOnExceptionResponse)
-import Network.Wai.Parse (File, ParseRequestBodyOptions, lbsBackEnd, parseRequestBodyEx)
+import Network.Wai.Parse (File, ParseRequestBodyOptions, defaultParseRequestBodyOptions, lbsBackEnd, parseRequestBodyEx)
 import Web.Cookie (SetCookie, parseCookiesText, renderSetCookie)
 import Web.Twain.Types
 
@@ -33,11 +33,14 @@ setRouteState :: RouteState e -> RouteM e ()
 setRouteState s = RouteM $ \_ -> return (Right ((), s))
 
 concatParams :: RouteState e -> [Param]
-concatParams p =
-  reqBodyParams p
-    <> reqCookieParams p
-    <> reqPathParams p
-    <> reqQueryParams p
+concatParams
+  RouteState
+    { reqBody = Just (FormBody (fps, _)),
+      reqCookieParams = cps,
+      reqPathParams = pps,
+      reqQueryParams = qps
+    } = qps <> pps <> cps <> fps
+concatParams s = reqQueryParams s <> reqPathParams s <> reqCookieParams s
 
 composeMiddleware :: [Middleware] -> Application
 composeMiddleware = L.foldl' (\a m -> m a) emptyApp
@@ -54,13 +57,11 @@ routeMiddleware method pat (RouteM route) env app req respond =
     Just pathParams -> do
       let st =
             RouteState
-              { reqBodyParams = [],
-                reqBodyFiles = [],
-                reqPathParams = pathParams,
+              { reqPathParams = pathParams,
                 reqQueryParams = decodeQueryParam <$> queryString req,
                 reqCookieParams = cookieParams req,
-                reqBodyJson = Left $ HttpError status400 "missing JSON body",
-                reqBodyParsed = False,
+                reqBody = Nothing,
+                parseBodyOpts = defaultParseRequestBodyOptions,
                 reqEnv = env,
                 reqWai = req
               }
@@ -74,41 +75,33 @@ match method (MatchPath f) req
   | maybe True (requestMethod req ==) method = f req
   | otherwise = Nothing
 
--- | Parse request body.
---
--- Use to customize `ParseRequestBodyOptions` before calls to `param`
--- and `file`.
-parseBody :: ParseRequestBodyOptions -> RouteM e ([Param], [File BL.ByteString])
-parseBody opts = do
+-- | Parse form request body.
+parseBodyForm :: RouteM e (RouteState e)
+parseBodyForm = do
   s <- routeState
-  if reqBodyParsed s
-    then return (concatParams s, reqBodyFiles s)
-    else do
+  case reqBody s of
+    Just (FormBody _) -> return s
+    _ -> do
+      let opts = parseBodyOpts s
       (ps, fs) <- liftIO $ parseRequestBodyEx opts lbsBackEnd (reqWai s)
-      let sb =
-            s
-              { reqBodyParams = decodeBsParam <$> ps,
-                reqBodyFiles = fs,
-                reqBodyParsed = True
-              }
-      setRouteState sb
-      return (concatParams sb, reqBodyFiles sb)
+      let parsedBody = FormBody (decodeBsParam <$> ps, fs)
+          s' = s {reqBody = Just parsedBody}
+      setRouteState s
+      return s
 
-parseBodyJson :: RouteM e (Either HttpError JSON.Value)
+-- | Parse JSON request body.
+parseBodyJson :: RouteM e JSON.Value
 parseBodyJson = do
   s <- routeState
-  if reqBodyParsed s
-    then return (reqBodyJson s)
-    else do
+  case reqBody s of
+    Just body@(JSONBody json) -> return json
+    _ -> do
       jsonE <- liftIO $ JSON.eitherDecode <$> lazyRequestBody (reqWai s)
       case jsonE of
-        Left msg -> do
-          let err = HttpError status400 msg
-          setRouteState $ s {reqBodyJson = Left err, reqBodyParsed = True}
-          return $ Left err
+        Left msg -> throwM $ HttpError status400 msg
         Right json -> do
-          setRouteState $ s {reqBodyJson = Right json, reqBodyParsed = True}
-          return $ Right json
+          setRouteState $ s {reqBody = Just (JSONBody json)}
+          return json
 
 cookieParams :: Request -> [Param]
 cookieParams req =

@@ -18,7 +18,7 @@ module Web.Twain
     -- * Request and Parameters.
     env,
     param,
-    param',
+    paramEither,
     paramMaybe,
     params,
     parseBody,
@@ -52,6 +52,7 @@ module Web.Twain
 where
 
 import Control.Exception (SomeException)
+import Control.Monad.Catch (throwM)
 import Data.Aeson (ToJSON)
 import qualified Data.Aeson as JSON
 import Data.ByteString.Char8 as Char8
@@ -65,7 +66,7 @@ import Data.Time
 import Network.HTTP.Types
 import Network.Wai (Application, Middleware, Request, Response, mapResponseHeaders, mapResponseStatus, requestHeaders, responseLBS)
 import Network.Wai.Handler.Warp (Port, Settings, defaultSettings, runEnv, runSettings, setOnExceptionResponse, setPort)
-import Network.Wai.Parse (File (..), FileInfo (..), defaultParseRequestBodyOptions, setMaxRequestFilesSize, setMaxRequestParmsSize)
+import Network.Wai.Parse (File (..), FileInfo (..), ParseRequestBodyOptions, defaultParseRequestBodyOptions, setMaxRequestFilesSize, setMaxRequestParmsSize)
 import System.Environment (lookupEnv)
 import Web.Cookie
 import Web.Twain.Internal
@@ -158,14 +159,18 @@ param name = do
   maybe next (either (const next) pure . parseParam) pM
 
 -- | Get a parameter or error if missing or parse failure.
-param' :: ParsableParam a => Text -> RouteM e (Either HttpError a)
-param' name = do
+paramEither :: ParsableParam a => Text -> RouteM e (Either HttpError a)
+paramEither name = do
   pM <- fmap snd . L.find ((==) name . fst) <$> params
-  let err = HttpError status400 (("missing parameter: " <> T.unpack name))
-  return $ maybe (Left err) parseParam pM
+  return $ case pM of
+    Nothing ->
+      Left $ HttpError status400 ("missing parameter: " <> T.unpack name)
+    Just p -> parseParam p
 
--- | Get an optional parameter. `Nothing` is returned for missing parameter or
--- parse failure.
+-- | Get an optional parameter.
+--
+-- Returns `Nothing` for missing parameter.
+-- Throws `HttpError` on parse failure.
 paramMaybe :: ParsableParam a => Text -> RouteM e (Maybe a)
 paramMaybe name = do
   pM <- fmap snd . L.find ((==) name . fst) <$> params
@@ -173,15 +178,33 @@ paramMaybe name = do
 
 -- | Get all parameters from query, path, cookie, and body (in that order).
 params :: RouteM e [Param]
-params = fst <$> parseBody defaultParseRequestBodyOptions
+params = concatParams <$> parseBodyForm
 
 -- | Get uploaded `FileInfo`.
-file :: Text -> RouteM e (Maybe (FileInfo BL.ByteString))
-file name = fmap snd . L.find ((==) (encodeUtf8 name) . fst) <$> files
+--
+-- If missing parameter or empty file, pass control to subsequent routes and
+-- middleware.
+file :: Text -> RouteM e (FileInfo BL.ByteString)
+file name = maybe next pure =<< fileMaybe name
+
+-- | Get optional uploaded `FileInfo`.
+--
+-- `Nothing` is returned for missing parameter or empty file content.
+fileMaybe :: Text -> RouteM e (Maybe (FileInfo BL.ByteString))
+fileMaybe name = do
+  fM <- fmap snd . L.find ((==) (encodeUtf8 name) . fst) <$> files
+  case fileContent <$> fM of
+    Nothing -> return Nothing
+    Just "" -> return Nothing
+    Just _ -> return fM
 
 -- | Get all uploaded files.
 files :: RouteM e [File BL.ByteString]
-files = snd <$> parseBody defaultParseRequestBodyOptions
+files = fs . reqBody <$> parseBodyForm
+  where
+    fs bodyM = case bodyM of
+      Just (FormBody (_, fs)) -> fs
+      _ -> []
 
 -- | Get the value of a request `Header`. Header names are case-insensitive.
 header :: Text -> RouteM e (Maybe Text)
@@ -196,12 +219,19 @@ headers = requestHeaders <$> request
 -- | Get the JSON value from request body.
 bodyJson :: JSON.FromJSON a => RouteM e (Either HttpError a)
 bodyJson = do
-  jsonE <- parseBodyJson
-  case jsonE of
-    Left e -> return (Left e)
-    Right v -> case JSON.fromJSON v of
-      JSON.Error msg -> return $ Left $ HttpError status400 msg
-      JSON.Success a -> return (Right a)
+  json <- parseBodyJson
+  case JSON.fromJSON json of
+    JSON.Error msg -> return $ Left $ HttpError status400 msg
+    JSON.Success a -> return $ Right a
+
+parseBody :: ParseRequestBodyOptions -> RouteM e ([Param], [File BL.ByteString])
+parseBody opts = do
+  s <- routeState
+  setRouteState (s {parseBodyOpts = opts})
+  s' <- reqBody <$> parseBodyForm
+  case s' of
+    Just (FormBody b) -> return b
+    _ -> return ([], [])
 
 -- | Get the WAI `Request`.
 request :: RouteM e Request

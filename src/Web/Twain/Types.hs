@@ -58,16 +58,18 @@ data RouteAction
 
 data RouteState e
   = RouteState
-      { reqBodyParams :: [Param],
-        reqBodyFiles :: [File BL.ByteString],
-        reqPathParams :: [Param],
+      { reqPathParams :: [Param],
         reqQueryParams :: [Param],
         reqCookieParams :: [Param],
-        reqBodyJson :: Either HttpError JSON.Value,
-        reqBodyParsed :: Bool,
+        reqBody :: Maybe ParsedBody,
+        parseBodyOpts :: ParseRequestBodyOptions,
         reqEnv :: e,
         reqWai :: Request
       }
+
+data ParsedBody
+  = FormBody ([Param], [File BL.ByteString])
+  | JSONBody JSON.Value
 
 instance Functor (RouteM e) where
   fmap f (RouteM g) = RouteM $ \s -> mapRight (\(a, b) -> (f a, b)) `fmap` g s
