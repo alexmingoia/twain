@@ -11,8 +11,9 @@ import Data.Int
 import Data.List as L
 import Data.Text as T
 import Data.Text.Encoding
-import Network.HTTP.Types (Method, hCookie, status204)
+import Network.HTTP.Types (Method, hCookie, status204, status400)
 import Network.Wai (Application, Middleware, Request, lazyRequestBody, queryString, requestHeaders, requestMethod, responseLBS)
+import Network.Wai.Handler.Warp (defaultOnExceptionResponse)
 import Network.Wai.Parse (File, ParseRequestBodyOptions, lbsBackEnd, parseRequestBodyEx)
 import Web.Cookie (SetCookie, parseCookiesText, renderSetCookie)
 import Web.Twain.Types
@@ -58,7 +59,7 @@ routeMiddleware method pat (RouteM route) env app req respond =
                 reqPathParams = pathParams,
                 reqQueryParams = decodeQueryParam <$> queryString req,
                 reqCookieParams = cookieParams req,
-                reqBodyJson = Left "missing JSON body",
+                reqBodyJson = Left $ HttpError status400 "missing JSON body",
                 reqBodyParsed = False,
                 reqEnv = env,
                 reqWai = req
@@ -93,15 +94,21 @@ parseBody opts = do
       setRouteState sb
       return (concatParams sb, reqBodyFiles sb)
 
-parseBodyJson :: RouteM e (Either String JSON.Value)
+parseBodyJson :: RouteM e (Either HttpError JSON.Value)
 parseBodyJson = do
   s <- routeState
   if reqBodyParsed s
     then return (reqBodyJson s)
     else do
       jsonE <- liftIO $ JSON.eitherDecode <$> lazyRequestBody (reqWai s)
-      setRouteState $ s {reqBodyJson = jsonE, reqBodyParsed = True}
-      return jsonE
+      case jsonE of
+        Left msg -> do
+          let err = HttpError status400 msg
+          setRouteState $ s {reqBodyJson = Left err, reqBodyParsed = True}
+          return $ Left err
+        Right json -> do
+          setRouteState $ s {reqBodyJson = Right json, reqBodyParsed = True}
+          return $ Right json
 
 cookieParams :: Request -> [Param]
 cookieParams req =

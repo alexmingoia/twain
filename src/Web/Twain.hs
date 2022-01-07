@@ -158,10 +158,11 @@ param name = do
   maybe next (either (const next) pure . parseParam) pM
 
 -- | Get a parameter or error if missing or parse failure.
-param' :: ParsableParam a => Text -> RouteM e (Either Text a)
+param' :: ParsableParam a => Text -> RouteM e (Either HttpError a)
 param' name = do
   pM <- fmap snd . L.find ((==) name . fst) <$> params
-  return $ maybe (Left ("missing parameter: " <> name)) parseParam pM
+  let err = HttpError status400 (("missing parameter: " <> T.unpack name))
+  return $ maybe (Left err) parseParam pM
 
 -- | Get an optional parameter. `Nothing` is returned for missing parameter or
 -- parse failure.
@@ -193,13 +194,13 @@ headers :: RouteM e [Header]
 headers = requestHeaders <$> request
 
 -- | Get the JSON value from request body.
-bodyJson :: JSON.FromJSON a => RouteM e (Either String a)
+bodyJson :: JSON.FromJSON a => RouteM e (Either HttpError a)
 bodyJson = do
   jsonE <- parseBodyJson
   case jsonE of
     Left e -> return (Left e)
     Right v -> case JSON.fromJSON v of
-      JSON.Error e -> return (Left e)
+      JSON.Error msg -> return $ Left $ HttpError status400 msg
       JSON.Success a -> return (Right a)
 
 -- | Get the WAI `Request`.

@@ -15,8 +15,8 @@ import Data.Text as T
 import Data.Text.Encoding
 import qualified Data.Text.Lazy as TL
 import Data.Word
+import Network.HTTP.Types (Status, status400)
 import Network.Wai (Middleware, Request, Response, pathInfo)
-import Network.Wai.Handler.Warp (defaultOnExceptionResponse)
 import Network.Wai.Parse (File, ParseRequestBodyOptions)
 import Numeric.Natural
 
@@ -63,7 +63,7 @@ data RouteState e
         reqPathParams :: [Param],
         reqQueryParams :: [Param],
         reqCookieParams :: [Param],
-        reqBodyJson :: Either String JSON.Value,
+        reqBodyJson :: Either HttpError JSON.Value,
         reqBodyParsed :: Bool,
         reqEnv :: e,
         reqWai :: Request
@@ -101,6 +101,11 @@ instance MonadCatch (RouteM e) where
          in h s
       Right a -> pure a
 
+data HttpError = HttpError Status String
+  deriving (Eq, Show)
+
+instance Exception HttpError
+
 type Param = (Text, Text)
 
 data PathPattern = MatchPath (Request -> Maybe [Param])
@@ -122,10 +127,10 @@ matchPath path req =
 
 -- | Parse values from request parameters.
 class ParsableParam a where
-  parseParam :: Text -> Either Text a
+  parseParam :: Text -> Either HttpError a
 
   -- | Default implementation parses comma-delimited lists.
-  parseParamList :: Text -> Either Text [a]
+  parseParamList :: Text -> Either HttpError [a]
   parseParamList t = mapM parseParam (T.split (== ',') t)
 
 -- ParsableParam class and instance code is from Andrew Farmer and Scotty
@@ -142,11 +147,14 @@ instance ParsableParam BL.ByteString where parseParam = Right . BL.fromStrict . 
 instance ParsableParam Char where
   parseParam t = case T.unpack t of
     [c] -> Right c
-    _ -> Left "parseParam Char: no parse"
+    _ -> Left $ HttpError status400 "parseParam Char: no parse"
   parseParamList = Right . T.unpack -- String
 
 instance ParsableParam () where
-  parseParam t = if T.null t then Right () else Left "parseParam Unit: no parse"
+  parseParam t =
+    if T.null t
+      then Right ()
+      else Left $ HttpError status400 "parseParam Unit: no parse"
 
 instance (ParsableParam a) => ParsableParam [a] where parseParam = parseParamList
 
@@ -157,7 +165,7 @@ instance ParsableParam Bool where
       else
         if t' == T.toCaseFold "false"
           then Right False
-          else Left "parseParam Bool: no parse"
+          else Left $ HttpError status400 "parseParam Bool: no parse"
     where
       t' = T.toCaseFold t
 
@@ -190,8 +198,8 @@ instance ParsableParam Word64 where parseParam = readEither
 instance ParsableParam Natural where parseParam = readEither
 
 -- | Useful for creating 'ParsableParam' instances for things that already implement 'Read'.
-readEither :: Read a => Text -> Either Text a
+readEither :: Read a => Text -> Either HttpError a
 readEither t = case [x | (x, "") <- reads (T.unpack t)] of
   [x] -> Right x
-  [] -> Left "readEither: no parse"
-  _ -> Left "readEither: ambiguous parse"
+  [] -> Left $ HttpError status400 "readEither: no parse"
+  _ -> Left $ HttpError status400 "readEither: ambiguous parse"
