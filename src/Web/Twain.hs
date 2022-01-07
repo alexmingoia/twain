@@ -89,7 +89,7 @@ twain :: Port -> e -> TwainM e () -> IO ()
 twain port env m = do
   mp <- lookupEnv "PORT"
   let p = maybe port read mp
-      st = exec m env
+      st = execTwain m env
       app = composeMiddleware $ middlewares st
       handler = onExceptionResponse st
       settings' = setOnExceptionResponse handler $ setPort p defaultSettings
@@ -98,19 +98,19 @@ twain port env m = do
 -- | Run a Twain app passing Warp `Settings`.
 twain' :: Settings -> e -> TwainM e () -> IO ()
 twain' settings env m = do
-  let st = exec m env
+  let st = execTwain m env
       app = composeMiddleware $ middlewares st
       settings' = setOnExceptionResponse (onExceptionResponse st) settings
   runSettings settings' app
 
 -- | Create a WAI `Application` from a Twain app and environment.
 twainApp :: e -> TwainM e () -> Application
-twainApp env m = composeMiddleware $ middlewares $ exec m env
+twainApp env m = composeMiddleware $ middlewares $ execTwain m env
 
 -- | Use the given middleware. The first declared is the outermost middleware
 -- (it has first access to request and last action on response).
 middleware :: Middleware -> TwainM e ()
-middleware m = modify (\st -> st {middlewares = m : middlewares st})
+middleware m = modifyTwainState (\st -> st {middlewares = m : middlewares st})
 
 get :: PathPattern -> RouteM e a -> TwainM e ()
 get = addRoute (Just "GET")
@@ -134,12 +134,13 @@ notFound = addRoute Nothing (MatchPath (const (Just [])))
 
 -- | Render a `Response` on exceptions.
 onException :: (SomeException -> Response) -> TwainM e ()
-onException handler = modify $ \st -> st {onExceptionResponse = handler}
+onException handler =
+  modifyTwainState $ \st -> st {onExceptionResponse = handler}
 
 -- | Add a route matching `Method` (optional) and `PathPattern`.
 addRoute :: Maybe Method -> PathPattern -> RouteM e a -> TwainM e ()
 addRoute method pat route =
-  modify $ \st ->
+  modifyTwainState $ \st ->
     let m = routeMiddleware method pat route (environment st)
      in st {middlewares = m : middlewares st}
 

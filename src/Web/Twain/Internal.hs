@@ -19,6 +19,12 @@ import Web.Twain.Types
 
 type MaxRequestSizeBytes = Int64
 
+modifyTwainState :: (TwainState e -> TwainState e) -> TwainM e ()
+modifyTwainState f = TwainM (\s -> ((), f s))
+
+execTwain :: TwainM e a -> e -> TwainState e
+execTwain (TwainM f) e = snd (f (TwainState [] e defaultOnExceptionResponse))
+
 routeState :: RouteM e (RouteState e)
 routeState = RouteM $ \s -> return (Right (s, s))
 

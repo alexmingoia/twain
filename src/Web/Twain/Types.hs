@@ -46,12 +46,6 @@ instance Monad (TwainM e) where
         (TwainM mb) = fn a
      in mb sb
 
-modify :: (TwainState e -> TwainState e) -> TwainM e ()
-modify f = TwainM (\s -> ((), f s))
-
-exec :: TwainM e a -> e -> TwainState e
-exec (TwainM f) e = snd (f (TwainState [] e defaultOnExceptionResponse))
-
 -- | `RouteM` is a Reader-like monad that can "short-circuit" and return a WAI
 -- response using a given environment. This provides convenient branching with
 -- do notation for redirects, error responses, etc.
