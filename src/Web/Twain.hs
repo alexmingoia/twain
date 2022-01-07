@@ -22,7 +22,7 @@ module Web.Twain
     paramMaybe,
     params,
     parseBody,
-    bodyJson,
+    fromBody,
     file,
     files,
     header,
@@ -217,12 +217,12 @@ headers :: RouteM e [Header]
 headers = requestHeaders <$> request
 
 -- | Get the JSON value from request body.
-bodyJson :: JSON.FromJSON a => RouteM e (Either HttpError a)
-bodyJson = do
+fromBody :: JSON.FromJSON a => RouteM e a
+fromBody = do
   json <- parseBodyJson
   case JSON.fromJSON json of
-    JSON.Error msg -> return $ Left $ HttpError status400 msg
-    JSON.Success a -> return $ Right a
+    JSON.Error msg -> throwM $ HttpError status400 msg
+    JSON.Success a -> return a
 
 parseBody :: ParseRequestBodyOptions -> RouteM e ([Param], [File BL.ByteString])
 parseBody opts = do
