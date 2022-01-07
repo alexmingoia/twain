@@ -13,6 +13,7 @@ module Web.Twain
     delete,
     notFound,
     onException,
+    withParseBodyOpts,
     addRoute,
 
     -- * Request and Parameters.
@@ -21,7 +22,6 @@ module Web.Twain
     paramEither,
     paramMaybe,
     params,
-    parseBody,
     fromBody,
     file,
     files,
@@ -47,6 +47,7 @@ module Web.Twain
     expireCookie,
     module Web.Twain.Types,
     module Network.HTTP.Types,
+    module Network.Wai,
     module Network.Wai.Parse,
   )
 where
@@ -66,7 +67,7 @@ import Data.Time
 import Network.HTTP.Types
 import Network.Wai (Application, Middleware, Request, Response, mapResponseHeaders, mapResponseStatus, requestHeaders, responseLBS)
 import Network.Wai.Handler.Warp (Port, Settings, defaultSettings, runEnv, runSettings, setOnExceptionResponse, setPort)
-import Network.Wai.Parse (File (..), FileInfo (..), ParseRequestBodyOptions, defaultParseRequestBodyOptions, setMaxRequestFilesSize, setMaxRequestParmsSize)
+import Network.Wai.Parse (File (..), FileInfo (..), ParseRequestBodyOptions, setMaxRequestFilesSize, setMaxRequestParmsSize)
 import System.Environment (lookupEnv)
 import Web.Cookie
 import Web.Twain.Internal
@@ -138,11 +139,16 @@ onException :: (SomeException -> Response) -> TwainM e ()
 onException handler =
   modifyTwainState $ \st -> st {onExceptionResponse = handler}
 
+-- | Specify `ParseRequestBodyOptions` to use when parsing request body.
+withParseBodyOpts :: ParseRequestBodyOptions -> TwainM e ()
+withParseBodyOpts opts =
+  modifyTwainState $ \st -> st {parseBodyOpts = opts}
+
 -- | Add a route matching `Method` (optional) and `PathPattern`.
 addRoute :: Maybe Method -> PathPattern -> RouteM e a -> TwainM e ()
 addRoute method pat route =
   modifyTwainState $ \st ->
-    let m = routeMiddleware method pat route (environment st)
+    let m = routeMiddleware method pat route st
      in st {middlewares = m : middlewares st}
 
 -- | Get the app environment.
@@ -223,15 +229,6 @@ fromBody = do
   case JSON.fromJSON json of
     JSON.Error msg -> throwM $ HttpError status400 msg
     JSON.Success a -> return a
-
-parseBody :: ParseRequestBodyOptions -> RouteM e ([Param], [File BL.ByteString])
-parseBody opts = do
-  s <- routeState
-  setRouteState (s {parseBodyOpts = opts})
-  s' <- reqBody <$> parseBodyForm
-  case s' of
-    Just (FormBody b) -> return b
-    _ -> return ([], [])
 
 -- | Get the WAI `Request`.
 request :: RouteM e Request

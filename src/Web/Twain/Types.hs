@@ -27,6 +27,7 @@ data TwainState e
   = TwainState
       { middlewares :: [Middleware],
         environment :: e,
+        parseBodyOpts :: ParseRequestBodyOptions,
         onExceptionResponse :: (SomeException -> Response)
       }
 
@@ -62,7 +63,7 @@ data RouteState e
         reqQueryParams :: [Param],
         reqCookieParams :: [Param],
         reqBody :: Maybe ParsedBody,
-        parseBodyOpts :: ParseRequestBodyOptions,
+        reqParseBodyOpts :: ParseRequestBodyOptions,
         reqEnv :: e,
         reqWai :: Request
       }

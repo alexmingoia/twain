@@ -24,7 +24,14 @@ modifyTwainState :: (TwainState e -> TwainState e) -> TwainM e ()
 modifyTwainState f = TwainM (\s -> ((), f s))
 
 execTwain :: TwainM e a -> e -> TwainState e
-execTwain (TwainM f) e = snd (f (TwainState [] e defaultOnExceptionResponse))
+execTwain (TwainM f) e =
+  snd $ f $
+    TwainState
+      { middlewares = [],
+        environment = e,
+        parseBodyOpts = defaultParseRequestBodyOptions,
+        onExceptionResponse = defaultOnExceptionResponse
+      }
 
 routeState :: RouteM e (RouteState e)
 routeState = RouteM $ \s -> return (Right (s, s))
@@ -49,23 +56,23 @@ routeMiddleware ::
   Maybe Method ->
   PathPattern ->
   RouteM e a ->
-  e ->
+  TwainState e ->
   Middleware
-routeMiddleware method pat (RouteM route) env app req respond =
+routeMiddleware method pat (RouteM route) ts app req respond =
   case match method pat req of
     Nothing -> app req respond
     Just pathParams -> do
-      let st =
+      let rs =
             RouteState
               { reqPathParams = pathParams,
                 reqQueryParams = decodeQueryParam <$> queryString req,
                 reqCookieParams = cookieParams req,
                 reqBody = Nothing,
-                parseBodyOpts = defaultParseRequestBodyOptions,
-                reqEnv = env,
+                reqParseBodyOpts = parseBodyOpts ts,
+                reqEnv = environment ts,
                 reqWai = req
               }
-      action <- route st
+      action <- route rs
       case action of
         Left (Respond res) -> respond res
         _ -> app req respond
@@ -82,7 +89,7 @@ parseBodyForm = do
   case reqBody s of
     Just (FormBody _) -> return s
     _ -> do
-      let opts = parseBodyOpts s
+      let opts = reqParseBodyOpts s
       (ps, fs) <- liftIO $ parseRequestBodyEx opts lbsBackEnd (reqWai s)
       let parsedBody = FormBody (decodeBsParam <$> ps, fs)
           s' = s {reqBody = Just parsedBody}
