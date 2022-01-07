@@ -273,8 +273,15 @@ xml body =
    in raw status200 [typ, len] lbs
 
 -- | Construct a raw response from a lazy `ByteString`.
+--
+-- Sets the Content-Length header if missing.
 raw :: Status -> [Header] -> BL.ByteString -> Response
-raw status headers body = responseLBS status headers body
+raw status headers body =
+  if L.any ((hContentLength ==) . fst) headers
+    then responseLBS status headers body
+    else
+      let len = (hContentLength, Char8.pack (show (BL.length body)))
+       in responseLBS status (len : headers) body
 
 -- | Set the `Status` for a `Response`.
 status :: Status -> Response -> Response
