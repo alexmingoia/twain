@@ -299,7 +299,9 @@ withCookie key val res =
   let setCookie =
         defaultSetCookie
           { setCookieName = encodeUtf8 key,
-            setCookieValue = encodeUtf8 val
+            setCookieValue = encodeUtf8 val,
+            setCookiePath = Just "/",
+            setCookieHttpOnly = True
           }
       header = (CI.mk "Set-Cookie", setCookieByteString setCookie)
    in mapResponseHeaders (header :) res
@@ -317,6 +319,8 @@ expireCookie key res = do
       setCookie =
         defaultSetCookie
           { setCookieName = encodeUtf8 key,
+            setCookiePath = Just "/",
+            setCookieHttpOnly = True,
             setCookieExpires = Just zeroTime
           }
       header = (CI.mk "Set-Cookie", setCookieByteString setCookie)
