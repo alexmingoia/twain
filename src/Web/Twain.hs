@@ -47,6 +47,7 @@ module Web.Twain
     expireCookie,
     module Web.Twain.Types,
     module Network.HTTP.Types,
+    module Network.Wai.Parse,
   )
 where
 
@@ -64,7 +65,7 @@ import Data.Time
 import Network.HTTP.Types
 import Network.Wai (Application, Middleware, Request, Response, mapResponseHeaders, mapResponseStatus, requestHeaders, responseLBS)
 import Network.Wai.Handler.Warp (Port, Settings, defaultSettings, runEnv, runSettings, setOnExceptionResponse, setPort)
-import Network.Wai.Parse (File, FileInfo, defaultParseRequestBodyOptions)
+import Network.Wai.Parse (File (..), FileInfo (..), defaultParseRequestBodyOptions, setMaxRequestFilesSize, setMaxRequestParmsSize)
 import System.Environment (lookupEnv)
 import Web.Cookie
 import Web.Twain.Internal
