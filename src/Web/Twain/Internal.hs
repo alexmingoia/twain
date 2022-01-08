@@ -93,8 +93,8 @@ parseBodyForm = do
       (ps, fs) <- liftIO $ parseRequestBodyEx opts lbsBackEnd (reqWai s)
       let parsedBody = FormBody (decodeBsParam <$> ps, fs)
           s' = s {reqBody = Just parsedBody}
-      setRouteState s
-      return s
+      setRouteState s'
+      return s'
 
 -- | Parse JSON request body.
 parseBodyJson :: RouteM e JSON.Value

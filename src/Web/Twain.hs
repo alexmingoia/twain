@@ -24,6 +24,7 @@ module Web.Twain
     params,
     fromBody,
     file,
+    fileMaybe,
     files,
     header,
     headers,
@@ -65,9 +66,9 @@ import Data.Text as T
 import Data.Text.Encoding
 import Data.Time
 import Network.HTTP.Types
-import Network.Wai (Application, Middleware, Request, Response, mapResponseHeaders, mapResponseStatus, requestHeaders, responseLBS)
-import Network.Wai.Handler.Warp (Port, Settings, defaultSettings, runEnv, runSettings, setOnExceptionResponse, setPort)
-import Network.Wai.Parse (File (..), FileInfo (..), ParseRequestBodyOptions, setMaxRequestFilesSize, setMaxRequestParmsSize)
+import Network.Wai
+import Network.Wai.Handler.Warp hiding (FileInfo)
+import Network.Wai.Parse hiding (Param)
 import System.Environment (lookupEnv)
 import Web.Cookie
 import Web.Twain.Internal
