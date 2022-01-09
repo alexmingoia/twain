@@ -1,5 +1,5 @@
 name:                twain
-version:             1.0.1.0
+version:             2.0.0.0
 github:              "alexmingoia/twain"
 license:             BSD3
 author:              "Alex Mingoia"
@@ -17,9 +17,9 @@ extra-source-files:
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description:         Twain is tiny web application framework for WAI. It
-  provides routing, parameter parsing, and a reader-like monad for composing
-  responses from an environment.
+description: Twain is tiny web application framework for WAI. It
+  provides routing, parameter parsing, and an either-like monad for composing
+  responses.
 
 dependencies:
 - aeson >= 1.4 && < 1.7
@@ -30,12 +30,14 @@ dependencies:
 - exceptions >= 0.10 && < 0.11
 - either >= 5.0 && < 5.1
 - http-types >= 0.12 && < 0.13
+- http2 >= 2.0 && < 3.1
 - text >= 1.2.3 && < 1.3
 - time >= 1.8 && < 1.9.9
 - transformers >= 0.5.6 && < 0.6
 - wai >= 3.2 && < 3.3
 - wai-extra >= 3.0 && < 3.2
 - warp >= 3.2 && < 3.4
+- vault >= 0.3 && < 0.4
 
 library:
   exposed-modules:

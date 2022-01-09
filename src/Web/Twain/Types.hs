@@ -20,88 +20,64 @@ import Network.Wai (Middleware, Request, Response, pathInfo)
 import Network.Wai.Parse (File, ParseRequestBodyOptions)
 import Numeric.Natural
 
--- | TwainM provides a monad interface for composing routes and middleware.
-newtype TwainM e a = TwainM (TwainState e -> (a, TwainState e))
-
-data TwainState e
-  = TwainState
-      { middlewares :: [Middleware],
-        environment :: e,
-        parseBodyOpts :: ParseRequestBodyOptions,
-        onExceptionResponse :: (SomeException -> Response)
-      }
-
-instance Functor (TwainM e) where
-  fmap f (TwainM g) = TwainM $ \s ->
-    let (a, sb) = g s
-     in (f a, sb)
-
-instance Applicative (TwainM e) where
-  pure = return
-  (<*>) = ap
-
-instance Monad (TwainM e) where
-  return a = TwainM (\s -> (a, s))
-  (TwainM m) >>= fn = TwainM $ \s ->
-    let (a, sb) = m s
-        (TwainM mb) = fn a
-     in mb sb
-
--- | `RouteM` is a Reader-like monad that can "short-circuit" and return a WAI
--- response using a given environment. This provides convenient branching with
--- do notation for redirects, error responses, etc.
-data RouteM e a
-  = RouteM (RouteState e -> IO (Either RouteAction (a, RouteState e)))
+-- | `ResponderM` is a Either-like monad that can "short-circuit" and return a
+-- response or pass control to the next middleware. This provides convenient
+-- branching with do notation for redirects, error responses, etc.
+data ResponderM a
+  = ResponderM (Request -> IO (Either RouteAction (a, Request)))
 
 data RouteAction
   = Respond Response
   | Next
 
-data RouteState e
-  = RouteState
-      { reqPathParams :: [Param],
-        reqQueryParams :: [Param],
-        reqCookieParams :: [Param],
-        reqBody :: Maybe ParsedBody,
-        reqParseBodyOpts :: ParseRequestBodyOptions,
-        reqEnv :: e,
-        reqWai :: Request
+data ParsedRequest
+  = ParsedRequest
+      { preqBody :: Maybe ParsedBody,
+        preqCookieParams :: [Param],
+        preqPathParams :: [Param],
+        preqQueryParams :: [Param]
+      }
+
+data ResponderOptions
+  = ResponderOptions
+      { optsMaxBodySize :: Word64,
+        optsParseBody :: ParseRequestBodyOptions
       }
 
 data ParsedBody
   = FormBody ([Param], [File BL.ByteString])
   | JSONBody JSON.Value
 
-instance Functor (RouteM e) where
-  fmap f (RouteM g) = RouteM $ \s -> mapRight (\(a, b) -> (f a, b)) `fmap` g s
+instance Functor ResponderM where
+  fmap f (ResponderM g) = ResponderM $ \r -> mapRight (\(a, b) -> (f a, b)) `fmap` g r
 
-instance Applicative (RouteM e) where
+instance Applicative ResponderM where
   pure = return
   (<*>) = ap
 
-instance Monad (RouteM e) where
-  return a = RouteM $ \s -> return (Right (a, s))
-  (RouteM act) >>= fn = RouteM $ \s -> do
-    eres <- act s
+instance Monad ResponderM where
+  return a = ResponderM $ \r -> return (Right (a, r))
+  (ResponderM act) >>= fn = ResponderM $ \r -> do
+    eres <- act r
     case eres of
       Left ract -> return (Left ract)
-      Right (a, sb) -> do
-        let (RouteM fres) = fn a
-        fres sb
+      Right (a, r') -> do
+        let (ResponderM fres) = fn a
+        fres r'
 
-instance MonadIO (RouteM e) where
-  liftIO act = RouteM $ \s -> act >>= \a -> return (Right (a, s))
+instance MonadIO ResponderM where
+  liftIO act = ResponderM $ \r -> act >>= \a -> return (Right (a, r))
 
-instance MonadThrow (RouteM e) where
+instance MonadThrow ResponderM where
   throwM = liftIO . throwIO
 
-instance MonadCatch (RouteM e) where
-  catch (RouteM act) f = RouteM $ \s -> do
-    ea <- try (act s)
+instance MonadCatch ResponderM where
+  catch (ResponderM act) f = ResponderM $ \r -> do
+    ea <- try (act r)
     case ea of
       Left e ->
-        let (RouteM h) = f e
-         in h s
+        let (ResponderM h) = f e
+         in h r
       Right a -> pure a
 
 data HttpError = HttpError Status String

@@ -1,31 +1,25 @@
 module Web.Twain
-  ( -- * Twain to WAI
-    twain,
-    twain',
-    twainApp,
-
-    -- * Middleware and Routes.
-    middleware,
+  ( -- * Routing.
     get,
     put,
     patch,
     post,
     delete,
+    route,
     notFound,
     onException,
     withParseBodyOpts,
-    addRoute,
+    withMaxBodySize,
 
     -- * Request and Parameters.
-    env,
     param,
     paramEither,
     paramMaybe,
     params,
-    fromBody,
     file,
     fileMaybe,
     files,
+    fromBody,
     header,
     headers,
     request,
@@ -53,7 +47,7 @@ module Web.Twain
   )
 where
 
-import Control.Exception (SomeException)
+import Control.Exception (SomeException, handle)
 import Control.Monad.Catch (throwM)
 import Data.Aeson (ToJSON)
 import qualified Data.Aeson as JSON
@@ -62,111 +56,109 @@ import Data.ByteString.Lazy as BL
 import qualified Data.CaseInsensitive as CI
 import Data.Either.Combinators (rightToMaybe)
 import qualified Data.List as L
+import Data.Maybe (fromMaybe)
 import Data.Text as T
 import Data.Text.Encoding
 import Data.Time
+import qualified Data.Vault.Lazy as V
+import Data.Word (Word64)
 import Network.HTTP.Types
 import Network.Wai
 import Network.Wai.Handler.Warp hiding (FileInfo)
 import Network.Wai.Parse hiding (Param)
+import Network.Wai.Request
 import System.Environment (lookupEnv)
 import Web.Cookie
 import Web.Twain.Internal
 import Web.Twain.Types
 
--- | Run a Twain app on `Port` using the given environment.
+get :: PathPattern -> ResponderM a -> Middleware
+get = route (Just "GET")
+
+put :: PathPattern -> ResponderM a -> Middleware
+put = route (Just "PUT")
+
+patch :: PathPattern -> ResponderM a -> Middleware
+patch = route (Just "PATCH")
+
+post :: PathPattern -> ResponderM a -> Middleware
+post = route (Just "POST")
+
+delete :: PathPattern -> ResponderM a -> Middleware
+delete = route (Just "DELETE")
+
+-- | Route request matching optional `Method` and `PathPattern` to `ResponderM`.
+route :: Maybe Method -> PathPattern -> ResponderM a -> Middleware
+route method pat (ResponderM responder) app req respond = do
+  let maxM = optsMaxBodySize <$> V.lookup responderOptsKey (vault req)
+  req' <- maybe (pure req) (flip requestSizeCheck req) maxM
+  case match method pat req' of
+    Nothing -> app req' respond
+    Just pathParams -> do
+      let preq = parseRequest req'
+          preq' = preq {preqPathParams = pathParams}
+          req'' = req' {vault = V.insert parsedReqKey preq' (vault req')}
+      eres <- responder req''
+      case eres of
+        Left (Respond res) -> respond res
+        _ -> app req'' respond
+
+-- | Respond if no other route responds.
 --
--- If a PORT environment variable is set, it will take precendence.
+-- Sets the status to 404.
+notFound :: ResponderM a -> Application
+notFound (ResponderM responder) req respond = do
+  let preq = parseRequest req
+      req' = req {vault = V.insert parsedReqKey preq (vault req)}
+  eres <- responder req'
+  case eres of
+    Left (Respond res) -> respond $ mapResponseStatus (const status404) res
+    _ -> respond $ status status404 $ text "Not found."
+
+onException :: (SomeException -> ResponderM a) -> Middleware
+onException h app req respond = do
+  handle handler $ app req respond
+  where
+    handler err = do
+      let preq = parseRequest req
+          req' = req {vault = V.insert parsedReqKey preq (vault req)}
+      let (ResponderM responder) = h err
+      eres <- responder req'
+      case eres of
+        Left (Respond res) -> respond res
+        _ -> app req' respond
+
+-- | Specify maximum request body size in bytes.
 --
--- > twain 8080 "My App" $ do
--- >   middleware logger
--- >   get "/" $ do
--- >     appTitle <- env
--- >     send $ text ("Hello from " <> appTitle)
--- >   get "/greetings/:name"
--- >     name <- param "name"
--- >     send $ text ("Hello, " <> name)
--- >   notFound $ do
--- >     send $ status status404 $ text "Not Found"
-twain :: Port -> e -> TwainM e () -> IO ()
-twain port env m = do
-  mp <- lookupEnv "PORT"
-  let p = maybe port read mp
-      st = execTwain m env
-      app = composeMiddleware $ middlewares st
-      handler = onExceptionResponse st
-      settings' = setOnExceptionResponse handler $ setPort p defaultSettings
-  runSettings settings' app
-
--- | Run a Twain app passing Warp `Settings`.
-twain' :: Settings -> e -> TwainM e () -> IO ()
-twain' settings env m = do
-  let st = execTwain m env
-      app = composeMiddleware $ middlewares st
-      settings' = setOnExceptionResponse (onExceptionResponse st) settings
-  runSettings settings' app
-
--- | Create a WAI `Application` from a Twain app and environment.
-twainApp :: e -> TwainM e () -> Application
-twainApp env m = composeMiddleware $ middlewares $ execTwain m env
-
--- | Use the given middleware. The first declared is the outermost middleware
--- (it has first access to request and last action on response).
-middleware :: Middleware -> TwainM e ()
-middleware m = modifyTwainState (\st -> st {middlewares = m : middlewares st})
-
-get :: PathPattern -> RouteM e a -> TwainM e ()
-get = addRoute (Just "GET")
-
-put :: PathPattern -> RouteM e a -> TwainM e ()
-put = addRoute (Just "PUT")
-
-patch :: PathPattern -> RouteM e a -> TwainM e ()
-patch = addRoute (Just "PATCH")
-
-post :: PathPattern -> RouteM e a -> TwainM e ()
-post = addRoute (Just "POST")
-
-delete :: PathPattern -> RouteM e a -> TwainM e ()
-delete = addRoute (Just "DELETE")
-
--- | Add a route if nothing else is found. This matches any request, so it
--- should go last.
-notFound :: RouteM e a -> TwainM e ()
-notFound = addRoute Nothing (MatchPath (const (Just [])))
-
--- | Render a `Response` on exceptions.
-onException :: (SomeException -> Response) -> TwainM e ()
-onException handler =
-  modifyTwainState $ \st -> st {onExceptionResponse = handler}
+-- Defaults to 64KB.
+withMaxBodySize :: Word64 -> Middleware
+withMaxBodySize max app req respond = do
+  let optsM = V.lookup responderOptsKey (vault req)
+      opts = fromMaybe defaultResponderOpts optsM
+      opts' = opts {optsMaxBodySize = max}
+  let req' = req {vault = V.insert responderOptsKey opts' (vault req)}
+  app req' respond
 
 -- | Specify `ParseRequestBodyOptions` to use when parsing request body.
-withParseBodyOpts :: ParseRequestBodyOptions -> TwainM e ()
-withParseBodyOpts opts =
-  modifyTwainState $ \st -> st {parseBodyOpts = opts}
-
--- | Add a route matching `Method` (optional) and `PathPattern`.
-addRoute :: Maybe Method -> PathPattern -> RouteM e a -> TwainM e ()
-addRoute method pat route =
-  modifyTwainState $ \st ->
-    let m = routeMiddleware method pat route st
-     in st {middlewares = m : middlewares st}
-
--- | Get the app environment.
-env :: RouteM e e
-env = RouteM $ \st -> return $ Right (reqEnv st, st)
+withParseBodyOpts :: ParseRequestBodyOptions -> Middleware
+withParseBodyOpts parseBodyOpts app req respond = do
+  let optsM = V.lookup responderOptsKey (vault req)
+      opts = fromMaybe defaultResponderOpts optsM
+      opts' = opts {optsParseBody = parseBodyOpts}
+  let req' = req {vault = V.insert responderOptsKey opts' (vault req)}
+  app req' respond
 
 -- | Get a parameter. Looks in query, path, cookie, and body (in that order).
 --
 -- If no parameter is found, or parameter fails to parse, `next` is called
 -- which passes control to subsequent routes and middleware.
-param :: ParsableParam a => Text -> RouteM e a
+param :: ParsableParam a => Text -> ResponderM a
 param name = do
   pM <- fmap snd . L.find ((==) name . fst) <$> params
   maybe next (either (const next) pure . parseParam) pM
 
 -- | Get a parameter or error if missing or parse failure.
-paramEither :: ParsableParam a => Text -> RouteM e (Either HttpError a)
+paramEither :: ParsableParam a => Text -> ResponderM (Either HttpError a)
 paramEither name = do
   pM <- fmap snd . L.find ((==) name . fst) <$> params
   return $ case pM of
@@ -178,26 +170,26 @@ paramEither name = do
 --
 -- Returns `Nothing` for missing parameter.
 -- Throws `HttpError` on parse failure.
-paramMaybe :: ParsableParam a => Text -> RouteM e (Maybe a)
+paramMaybe :: ParsableParam a => Text -> ResponderM (Maybe a)
 paramMaybe name = do
   pM <- fmap snd . L.find ((==) name . fst) <$> params
   return $ maybe Nothing (rightToMaybe . parseParam) pM
 
 -- | Get all parameters from query, path, cookie, and body (in that order).
-params :: RouteM e [Param]
+params :: ResponderM [Param]
 params = concatParams <$> parseBodyForm
 
 -- | Get uploaded `FileInfo`.
 --
 -- If missing parameter or empty file, pass control to subsequent routes and
 -- middleware.
-file :: Text -> RouteM e (FileInfo BL.ByteString)
+file :: Text -> ResponderM (FileInfo BL.ByteString)
 file name = maybe next pure =<< fileMaybe name
 
 -- | Get optional uploaded `FileInfo`.
 --
 -- `Nothing` is returned for missing parameter or empty file content.
-fileMaybe :: Text -> RouteM e (Maybe (FileInfo BL.ByteString))
+fileMaybe :: Text -> ResponderM (Maybe (FileInfo BL.ByteString))
 fileMaybe name = do
   fM <- fmap snd . L.find ((==) (encodeUtf8 name) . fst) <$> files
   case fileContent <$> fM of
@@ -206,34 +198,34 @@ fileMaybe name = do
     Just _ -> return fM
 
 -- | Get all uploaded files.
-files :: RouteM e [File BL.ByteString]
-files = fs . reqBody <$> parseBodyForm
+files :: ResponderM [File BL.ByteString]
+files = fs . preqBody <$> parseBodyForm
   where
     fs bodyM = case bodyM of
       Just (FormBody (_, fs)) -> fs
       _ -> []
 
--- | Get the value of a request `Header`. Header names are case-insensitive.
-header :: Text -> RouteM e (Maybe Text)
-header name = do
-  let ciname = CI.mk (encodeUtf8 name)
-  fmap (decodeUtf8 . snd) . L.find ((==) ciname . fst) <$> headers
-
--- | Get the request headers.
-headers :: RouteM e [Header]
-headers = requestHeaders <$> request
-
 -- | Get the JSON value from request body.
-fromBody :: JSON.FromJSON a => RouteM e a
+fromBody :: JSON.FromJSON a => ResponderM a
 fromBody = do
   json <- parseBodyJson
   case JSON.fromJSON json of
     JSON.Error msg -> throwM $ HttpError status400 msg
     JSON.Success a -> return a
 
+-- | Get the value of a request `Header`. Header names are case-insensitive.
+header :: Text -> ResponderM (Maybe Text)
+header name = do
+  let ciname = CI.mk (encodeUtf8 name)
+  fmap (decodeUtf8 . snd) . L.find ((==) ciname . fst) <$> headers
+
+-- | Get the request headers.
+headers :: ResponderM [Header]
+headers = requestHeaders <$> request
+
 -- | Get the WAI `Request`.
-request :: RouteM e Request
-request = reqWai <$> routeState
+request :: ResponderM Request
+request = getRequest
 
 -- | Send a `Response`.
 --
@@ -254,12 +246,12 @@ request = reqWai <$> routeState
 -- Send a response `withCookie`:
 --
 -- > send $ withCookie "key" "val" $ text "Hello"
-send :: Response -> RouteM e a
-send res = RouteM $ \_ -> return $ Left (Respond res)
+send :: Response -> ResponderM a
+send res = ResponderM $ \_ -> return $ Left (Respond res)
 
 -- | Pass control to the next route or middleware.
-next :: RouteM e a
-next = RouteM $ \_ -> return (Left Next)
+next :: ResponderM a
+next = ResponderM $ \_ -> return (Left Next)
 
 -- | Construct a `Text` response.
 --

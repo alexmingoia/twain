@@ -1,7 +1,8 @@
 module Web.Twain.Internal where
 
+import Control.Exception (handle, throwIO)
 import Control.Monad (join)
-import Control.Monad.Catch (throwM)
+import Control.Monad.Catch (throwM, try)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.Aeson as JSON
 import qualified Data.ByteString as B
@@ -9,73 +10,64 @@ import Data.ByteString.Builder (toLazyByteString)
 import qualified Data.ByteString.Lazy as BL
 import Data.Int
 import Data.List as L
+import Data.Maybe (fromJust, fromMaybe)
 import Data.Text as T
 import Data.Text.Encoding
-import Network.HTTP.Types (Method, hCookie, status204, status400)
-import Network.Wai (Application, Middleware, Request, lazyRequestBody, queryString, requestHeaders, requestMethod, responseLBS)
+import qualified Data.Vault.Lazy as V
+import Data.Word (Word64)
+import Network.HTTP.Types (Method, hCookie, mkStatus, status204, status400, status413, status500)
+import Network.HTTP2 (ErrorCodeId (..), HTTP2Error (..))
+import Network.Wai (Application, Middleware, Request (..), lazyRequestBody, queryString, requestHeaders, requestMethod, responseLBS)
 import Network.Wai.Handler.Warp (defaultOnExceptionResponse)
-import Network.Wai.Parse (File, ParseRequestBodyOptions, defaultParseRequestBodyOptions, lbsBackEnd, parseRequestBodyEx)
+import Network.Wai.Parse (File, ParseRequestBodyOptions, lbsBackEnd, noLimitParseRequestBodyOptions, parseRequestBodyEx)
+import Network.Wai.Request (RequestSizeException (..), requestSizeCheck)
+import System.IO.Unsafe (unsafePerformIO)
 import Web.Cookie (SetCookie, parseCookiesText, renderSetCookie)
 import Web.Twain.Types
 
-type MaxRequestSizeBytes = Int64
+parsedReqKey :: V.Key ParsedRequest
+parsedReqKey = unsafePerformIO V.newKey
+{-# NOINLINE parsedReqKey #-}
 
-modifyTwainState :: (TwainState e -> TwainState e) -> TwainM e ()
-modifyTwainState f = TwainM (\s -> ((), f s))
+responderOptsKey :: V.Key ResponderOptions
+responderOptsKey = unsafePerformIO V.newKey
+{-# NOINLINE responderOptsKey #-}
 
-execTwain :: TwainM e a -> e -> TwainState e
-execTwain (TwainM f) e =
-  snd $ f $
-    TwainState
-      { middlewares = [],
-        environment = e,
-        parseBodyOpts = defaultParseRequestBodyOptions,
-        onExceptionResponse = defaultOnExceptionResponse
-      }
+defaultResponderOpts :: ResponderOptions
+defaultResponderOpts =
+  ResponderOptions
+    { optsMaxBodySize = 64000,
+      optsParseBody = noLimitParseRequestBodyOptions
+    }
 
-routeState :: RouteM e (RouteState e)
-routeState = RouteM $ \s -> return (Right (s, s))
+getRequest :: ResponderM Request
+getRequest = ResponderM $ \r -> return (Right (r, r))
 
-setRouteState :: RouteState e -> RouteM e ()
-setRouteState s = RouteM $ \_ -> return (Right ((), s))
+setRequest :: Request -> ResponderM ()
+setRequest r = ResponderM $ \_ -> return (Right ((), r))
 
-concatParams :: RouteState e -> [Param]
+concatParams :: ParsedRequest -> [Param]
 concatParams
-  RouteState
-    { reqBody = Just (FormBody (fps, _)),
-      reqCookieParams = cps,
-      reqPathParams = pps,
-      reqQueryParams = qps
+  ParsedRequest
+    { preqBody = Just (FormBody (fps, _)),
+      preqCookieParams = cps,
+      preqPathParams = pps,
+      preqQueryParams = qps
     } = qps <> pps <> cps <> fps
-concatParams s = reqQueryParams s <> reqPathParams s <> reqCookieParams s
+concatParams preq =
+  preqQueryParams preq <> preqPathParams preq <> preqCookieParams preq
 
-composeMiddleware :: [Middleware] -> Application
-composeMiddleware = L.foldl' (\a m -> m a) emptyApp
-
-routeMiddleware ::
-  Maybe Method ->
-  PathPattern ->
-  RouteM e a ->
-  TwainState e ->
-  Middleware
-routeMiddleware method pat (RouteM route) ts app req respond =
-  case match method pat req of
-    Nothing -> app req respond
-    Just pathParams -> do
-      let rs =
-            RouteState
-              { reqPathParams = pathParams,
-                reqQueryParams = decodeQueryParam <$> queryString req,
-                reqCookieParams = cookieParams req,
-                reqBody = Nothing,
-                reqParseBodyOpts = parseBodyOpts ts,
-                reqEnv = environment ts,
-                reqWai = req
-              }
-      action <- route rs
-      case action of
-        Left (Respond res) -> respond res
-        _ -> app req respond
+parseRequest :: Request -> ParsedRequest
+parseRequest req =
+  case V.lookup parsedReqKey (vault req) of
+    Just preq -> preq
+    Nothing ->
+      ParsedRequest
+        { preqPathParams = [],
+          preqQueryParams = decodeQueryParam <$> queryString req,
+          preqCookieParams = cookieParams req,
+          preqBody = Nothing
+        }
 
 match :: Maybe Method -> PathPattern -> Request -> Maybe [Param]
 match method (MatchPath f) req
@@ -83,32 +75,49 @@ match method (MatchPath f) req
   | otherwise = Nothing
 
 -- | Parse form request body.
-parseBodyForm :: RouteM e (RouteState e)
+parseBodyForm :: ResponderM ParsedRequest
 parseBodyForm = do
-  s <- routeState
-  case reqBody s of
-    Just (FormBody _) -> return s
+  req <- getRequest
+  let preq = fromJust $ V.lookup parsedReqKey (vault req)
+  case preqBody preq of
+    Just (FormBody _) -> return preq
     _ -> do
-      let opts = reqParseBodyOpts s
-      (ps, fs) <- liftIO $ parseRequestBodyEx opts lbsBackEnd (reqWai s)
+      let optsM = optsParseBody <$> V.lookup responderOptsKey (vault req)
+          opts = fromMaybe noLimitParseRequestBodyOptions optsM
+      (ps, fs) <- liftIO $ parseRequestBodyEx opts lbsBackEnd req
       let parsedBody = FormBody (decodeBsParam <$> ps, fs)
-          s' = s {reqBody = Just parsedBody}
-      setRouteState s'
-      return s'
+          preq' = preq {preqBody = Just parsedBody}
+      setRequest $ req {vault = V.insert parsedReqKey preq' (vault req)}
+      return preq'
 
 -- | Parse JSON request body.
-parseBodyJson :: RouteM e JSON.Value
+parseBodyJson :: ResponderM JSON.Value
 parseBodyJson = do
-  s <- routeState
-  case reqBody s of
-    Just body@(JSONBody json) -> return json
+  req <- getRequest
+  let preq = fromJust $ V.lookup parsedReqKey (vault req)
+  case preqBody preq of
+    Just (JSONBody json) -> return json
     _ -> do
-      jsonE <- liftIO $ JSON.eitherDecode <$> lazyRequestBody (reqWai s)
+      jsonE <- liftIO $ JSON.eitherDecode <$> lazyRequestBody req
       case jsonE of
         Left msg -> throwM $ HttpError status400 msg
         Right json -> do
-          setRouteState $ s {reqBody = Just (JSONBody json)}
+          let preq' = preq {preqBody = Just (JSONBody json)}
+          setRequest $ req {vault = V.insert parsedReqKey preq' (vault req)}
           return json
+
+wrapMaxReqErr :: RequestSizeException -> IO a
+wrapMaxReqErr (RequestSizeException max) =
+  throwIO $ HttpError status413 $
+    "Request body size larger than " <> show max <> " bytes."
+
+wrapParseErr :: HTTP2Error -> IO a
+wrapParseErr (ConnectionError (UnknownErrorCode code) msg) = do
+  let msg' = unpack $ decodeUtf8 msg
+  throwIO $ HttpError (mkStatus (fromIntegral code) msg) msg'
+wrapParseErr (ConnectionError _ msg) = do
+  let msg' = unpack $ decodeUtf8 msg
+  throwIO $ HttpError status500 msg'
 
 cookieParams :: Request -> [Param]
 cookieParams req =
@@ -124,6 +133,3 @@ decodeQueryParam (a, b) = (decodeUtf8 a, maybe "" decodeUtf8 b)
 
 decodeBsParam :: (B.ByteString, B.ByteString) -> Param
 decodeBsParam (a, b) = (decodeUtf8 a, decodeUtf8 b)
-
-emptyApp :: Application
-emptyApp req respond = respond $ responseLBS status204 [] ""
