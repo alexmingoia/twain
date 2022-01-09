@@ -1,5 +1,36 @@
+-- | Twain is a tiny web application framework for WAI
+--
+-- - `ResponderM` for composing responses with do notation.
+-- - Routing with path captures that decompose `ResponderM` into middleware.
+-- - Parameter parsing for cookies, path, query, and body.
+-- - Helpers for redirects, headers, status codes, and errors.
+--
+-- @
+-- import Network.Wai.Handler.Warp (run)
+-- import Web.Twain
+--
+-- index :: ResponderM a
+-- index = send $ html "Hello World!"
+--
+-- echoName :: ResponderM a
+-- echoName = do
+--   name <- param "name"
+--   send $ html $ "Hello, " <> name
+--
+-- missing :: ResponderM a
+-- missing = send $ html "Not found..."
+--
+-- main :: IO ()
+-- main = do
+--   run 8080
+--     $ get "/" index
+--     $ post "/echo/:name" echoName
+--     $ notFound missing
+-- @
 module Web.Twain
-  ( -- * Routing.
+  ( ResponderM,
+
+    -- * Routing
     get,
     put,
     patch,
@@ -7,11 +38,8 @@ module Web.Twain
     delete,
     route,
     notFound,
-    onException,
-    withParseBodyOpts,
-    withMaxBodySize,
 
-    -- * Request and Parameters.
+    -- * Request and Parameters
     param,
     paramEither,
     paramMaybe,
@@ -24,7 +52,7 @@ module Web.Twain
     headers,
     request,
 
-    -- * Responses.
+    -- * Responses
     send,
     next,
     redirect301,
@@ -40,10 +68,19 @@ module Web.Twain
     withCookie,
     withCookie',
     expireCookie,
-    module Web.Twain.Types,
+
+    -- * Errors
+    HttpError (..),
+    onException,
+
+    -- * Middleware
+    withParseBodyOpts,
+    withMaxBodySize,
+
+    -- * Re-exports
     module Network.HTTP.Types,
     module Network.Wai,
-    module Network.Wai.Parse,
+    FileInfo (..),
   )
 where
 

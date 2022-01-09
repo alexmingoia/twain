@@ -10,7 +10,7 @@ import Data.ByteString.Builder (toLazyByteString)
 import qualified Data.ByteString.Lazy as BL
 import Data.Int
 import Data.List as L
-import Data.Maybe (fromJust, fromMaybe)
+import Data.Maybe (fromMaybe)
 import Data.Text as T
 import Data.Text.Encoding
 import qualified Data.Vault.Lazy as V
@@ -78,13 +78,13 @@ match method (MatchPath f) req
 parseBodyForm :: ResponderM ParsedRequest
 parseBodyForm = do
   req <- getRequest
-  let preq = fromJust $ V.lookup parsedReqKey (vault req)
+  let preq = fromMaybe (parseRequest req) $ V.lookup parsedReqKey (vault req)
   case preqBody preq of
     Just (FormBody _) -> return preq
     _ -> do
       let optsM = optsParseBody <$> V.lookup responderOptsKey (vault req)
           opts = fromMaybe noLimitParseRequestBodyOptions optsM
-      (ps, fs) <- liftIO $ parseRequestBodyEx opts lbsBackEnd req
+      (ps, fs) <- liftIO $ wrapErr $ parseRequestBodyEx opts lbsBackEnd req
       let parsedBody = FormBody (decodeBsParam <$> ps, fs)
           preq' = preq {preqBody = Just parsedBody}
       setRequest $ req {vault = V.insert parsedReqKey preq' (vault req)}
@@ -94,17 +94,19 @@ parseBodyForm = do
 parseBodyJson :: ResponderM JSON.Value
 parseBodyJson = do
   req <- getRequest
-  let preq = fromJust $ V.lookup parsedReqKey (vault req)
+  let preq = fromMaybe (parseRequest req) $ V.lookup parsedReqKey (vault req)
   case preqBody preq of
     Just (JSONBody json) -> return json
     _ -> do
-      jsonE <- liftIO $ JSON.eitherDecode <$> lazyRequestBody req
+      jsonE <- liftIO $ wrapErr $ JSON.eitherDecode <$> lazyRequestBody req
       case jsonE of
         Left msg -> throwM $ HttpError status400 msg
         Right json -> do
           let preq' = preq {preqBody = Just (JSONBody json)}
           setRequest $ req {vault = V.insert parsedReqKey preq' (vault req)}
           return json
+
+wrapErr = handle wrapMaxReqErr . handle wrapParseErr
 
 wrapMaxReqErr :: RequestSizeException -> IO a
 wrapMaxReqErr (RequestSizeException max) =

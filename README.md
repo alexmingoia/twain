@@ -4,26 +4,32 @@
 ![BSD3 License](http://img.shields.io/badge/license-BSD3-brightgreen.svg)
 
 Twain is a tiny web application framework for
-[WAI](http://hackage.haskell.org/package/wai) that provides the `ResponderM`
-monad for composing responses, and helpers for routing and parameter parsing.
+[WAI](http://hackage.haskell.org/package/wai).
 
-`ResponderM` is an Either-like monad that can "short-circuit" and return a
-response, or pass control to the next middleware. This provides convenient
-branching with do notation for redirects, error responses, etc.
-
-Twain also includes:
-
-- Routing with path captures that decompose into WAI middleare.
+- `ResponderM` for composing responses with do notation.
+- Routing with path captures that decompose `ResponderM` into middleware.
 - Parameter parsing from cookies, path, query, and body.
 - Helpers for redirects, headers, status codes, and errors.
 
 ```haskell
 import Network.Wai.Handler.Warp (run)
 import Web.Twain
-
+  
+index :: ResponderM a
+index = send $ html "Hello World!"
+  
+echoName :: ResponderM a
+echoName = do
+  name <- param "name"
+  send $ html $ "Hello, " <> name
+  
+missing :: ResponderM a
+missing = send $ html "Not found..."
+ 
 main :: IO ()
 main = do
   run 8080
-    $ get "/" (send $ html "Hello World!")
-    $ notFound (send $ html "Not found...")
+    $ get "/" index
+    $ post "/echo/:name" echoName
+    $ notFound missing
 ```

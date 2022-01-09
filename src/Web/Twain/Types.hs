@@ -20,8 +20,8 @@ import Network.Wai (Middleware, Request, Response, pathInfo)
 import Network.Wai.Parse (File, ParseRequestBodyOptions)
 import Numeric.Natural
 
--- | `ResponderM` is a Either-like monad that can "short-circuit" and return a
--- response or pass control to the next middleware. This provides convenient
+-- | `ResponderM` is an Either-like monad that can "short-circuit" and return a
+-- response, or pass control to the next middleware. This provides convenient
 -- branching with do notation for redirects, error responses, etc.
 data ResponderM a
   = ResponderM (Request -> IO (Either RouteAction (a, Request)))
