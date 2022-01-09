@@ -14,22 +14,22 @@ Twain is a tiny web application framework for
 ```haskell
 import Network.Wai.Handler.Warp (run)
 import Web.Twain
-  
-index :: ResponderM a
-index = send $ html "Hello World!"
-  
-echoName :: ResponderM a
-echoName = do
-  name <- param "name"
-  send $ html $ "Hello, " <> name
-  
-missing :: ResponderM a
-missing = send $ html "Not found..."
- 
+
 main :: IO ()
 main = do
   run 8080
     $ get "/" index
     $ post "/echo/:name" echoName
     $ notFound missing
+
+index :: ResponderM a
+index = send $ html "Hello World!"
+
+echo :: ResponderM a
+echo = do
+  name <- param "name"
+  send $ html $ "Hello, " <> name
+
+missing :: ResponderM a
+missing = send $ html "Not found..."
 ```

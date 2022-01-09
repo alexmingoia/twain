@@ -9,23 +9,23 @@
 -- import Network.Wai.Handler.Warp (run)
 -- import Web.Twain
 --
+-- main :: IO ()
+-- main = do
+--   run 8080
+--     $ get "/" index
+--     $ post "/echo/:name" echo
+--     $ notFound missing
+--
 -- index :: ResponderM a
 -- index = send $ html "Hello World!"
 --
--- echoName :: ResponderM a
--- echoName = do
+-- echo :: ResponderM a
+-- echo = do
 --   name <- param "name"
 --   send $ html $ "Hello, " <> name
 --
 -- missing :: ResponderM a
 -- missing = send $ html "Not found..."
---
--- main :: IO ()
--- main = do
---   run 8080
---     $ get "/" index
---     $ post "/echo/:name" echoName
---     $ notFound missing
 -- @
 module Web.Twain
   ( ResponderM,
