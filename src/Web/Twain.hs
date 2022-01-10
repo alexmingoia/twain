@@ -39,7 +39,7 @@ module Web.Twain
     route,
     notFound,
 
-    -- * Request and Parameters
+    -- * Requests
     param,
     paramEither,
     paramMaybe,
@@ -77,6 +77,9 @@ module Web.Twain
     withParseBodyOpts,
     withMaxBodySize,
 
+    -- * Parameters
+    ParsableParam (..),
+
     -- * Re-exports
     module Network.HTTP.Types,
     module Network.Wai,
@@ -101,7 +104,6 @@ import qualified Data.Vault.Lazy as V
 import Data.Word (Word64)
 import Network.HTTP.Types
 import Network.Wai
-import Network.Wai.Handler.Warp hiding (FileInfo)
 import Network.Wai.Parse hiding (Param)
 import Network.Wai.Request
 import System.Environment (lookupEnv)
