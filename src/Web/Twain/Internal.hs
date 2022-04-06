@@ -16,7 +16,7 @@ import Data.Text.Encoding
 import qualified Data.Vault.Lazy as V
 import Data.Word (Word64)
 import Network.HTTP.Types (Method, hCookie, mkStatus, status204, status400, status413, status500)
-import Network.HTTP2 (ErrorCodeId (..), HTTP2Error (..))
+import Network.HTTP2.Frame (ErrorCodeId (..), HTTP2Error (..))
 import Network.Wai (Application, Middleware, Request (..), lazyRequestBody, queryString, requestHeaders, requestMethod, responseLBS)
 import Network.Wai.Parse (File, ParseRequestBodyOptions, lbsBackEnd, noLimitParseRequestBodyOptions, parseRequestBodyEx)
 import Network.Wai.Request (RequestSizeException (..), requestSizeCheck)

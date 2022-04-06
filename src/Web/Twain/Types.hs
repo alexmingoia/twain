@@ -52,11 +52,10 @@ instance Functor ResponderM where
   fmap f (ResponderM g) = ResponderM $ \r -> mapRight (\(a, b) -> (f a, b)) `fmap` g r
 
 instance Applicative ResponderM where
-  pure = return
+  pure a = ResponderM $ \r -> pure (Right (a, r))
   (<*>) = ap
 
 instance Monad ResponderM where
-  return a = ResponderM $ \r -> return (Right (a, r))
   (ResponderM act) >>= fn = ResponderM $ \r -> do
     eres <- act r
     case eres of
