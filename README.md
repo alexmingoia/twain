@@ -12,15 +12,21 @@ Twain is a tiny web application framework for
 - Helpers for redirects, headers, status codes, and errors.
 
 ```haskell
+{-# language OverloadedStrings #-}
+
 import Network.Wai.Handler.Warp (run)
 import Web.Twain
 
 main :: IO ()
 main = do
-  run 8080
-    $ get "/" index
-    $ post "/echo/:name" echoName
-    $ notFound missing
+  run 8080 $
+    foldr ($) (notFound missing) routes
+
+routes :: [Middleware]
+routes =
+  [ get "/" index
+  , post "/echo/:name" echoName
+  ]
 
 index :: ResponderM a
 index = send $ html "Hello World!"

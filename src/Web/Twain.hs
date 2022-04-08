@@ -6,15 +6,19 @@
 -- - Helpers for redirects, headers, status codes, and errors.
 --
 -- @
+-- {-# language OverloadedStrings #-}
+--
 -- import Network.Wai.Handler.Warp (run)
 -- import Web.Twain
 --
 -- main :: IO ()
 -- main = do
---   run 8080
---     $ get "/" index
---     $ post "/echo/:name" echo
---     $ notFound missing
+--   run 8080 $
+--     foldr ($)
+--       (notFound missing)
+--       [ get "/" index
+--       , post "/echo/:name" echo
+--       ]
 --
 -- index :: ResponderM a
 -- index = send $ html "Hello World!"
