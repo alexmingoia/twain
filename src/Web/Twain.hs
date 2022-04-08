@@ -62,6 +62,7 @@ module Web.Twain
     html,
     json,
     xml,
+    css,
     raw,
     status,
     withHeader,
@@ -296,41 +297,35 @@ next = ResponderM $ \_ -> return (Left Next)
 --
 -- Sets the Content-Type and Content-Length headers.
 text :: Text -> Response
-text body =
-  let lbs = BL.fromStrict (encodeUtf8 body)
-      typ = (hContentType, "text/plain; charset=utf-8")
-      len = (hContentLength, Char8.pack (show (BL.length lbs)))
-   in raw status200 [typ, len] lbs
+text =
+   raw status200 [(hContentType, "text/plain; charset=utf-8")] . BL.fromStrict . encodeUtf8
 
 -- | Construct an HTML response.
 --
 -- Sets the Content-Type and Content-Length headers.
 html :: BL.ByteString -> Response
-html body =
-  let lbs = body
-      typ = (hContentType, "text/html; charset=utf-8")
-      len = (hContentLength, Char8.pack (show (BL.length lbs)))
-   in raw status200 [typ, len] lbs
+html =
+   raw status200 [(hContentType, "text/html; charset=utf-8")]
 
 -- | Construct a JSON response using `ToJSON`.
 --
 -- Sets the Content-Type and Content-Length headers.
 json :: ToJSON a => a -> Response
-json val =
-  let lbs = JSON.encode val
-      typ = (hContentType, "application/json; charset=utf-8")
-      len = (hContentLength, Char8.pack (show (BL.length lbs)))
-   in raw status200 [typ, len] lbs
+json =
+  raw status200 [(hContentType, "application/json; charset=utf-8")] . JSON.encode
+
+-- | Construct a CSS response.
+--
+-- Sets the Content-Type and Content-Length headers.
+css :: BL.ByteString -> Response
+css =
+  raw status200 [(hContentType, "text/css; charset=utf-8")]
 
 -- | Construct an XML response.
 --
 -- Sets the Content-Type and Content-Length headers.
 xml :: BL.ByteString -> Response
-xml body =
-  let lbs = body
-      typ = (hContentType, "application/xml; charset=utf-8")
-      len = (hContentLength, Char8.pack (show (BL.length lbs)))
-   in raw status200 [typ, len] lbs
+xml = raw status200 [(hContentType, "application/xml; charset=utf-8")]
 
 -- | Construct a raw response from a lazy `ByteString`.
 --
