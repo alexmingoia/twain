@@ -31,8 +31,8 @@ routes =
 index :: ResponderM a
 index = send $ html "Hello World!"
 
-echo :: ResponderM a
-echo = do
+echoName :: ResponderM a
+echoName = do
   name <- param "name"
   send $ html $ "Hello, " <> name
 
