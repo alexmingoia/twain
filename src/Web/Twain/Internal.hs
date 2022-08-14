@@ -64,7 +64,7 @@ parseRequest req =
       ParsedRequest
         { preqPathParams = [],
           preqQueryParams = decodeQueryParam <$> queryString req,
-          preqCookieParams = cookieParams req,
+          preqCookieParams = parseCookieParams req,
           preqBody = Nothing
         }
 
@@ -120,8 +120,8 @@ wrapParseErr (ConnectionError _ msg) = do
   let msg' = unpack $ decodeUtf8 msg
   throwIO $ HttpError status500 msg'
 
-cookieParams :: Request -> [Param]
-cookieParams req =
+parseCookieParams :: Request -> [Param]
+parseCookieParams req =
   let headers = snd <$> L.filter ((==) hCookie . fst) (requestHeaders req)
    in join $ parseCookiesText <$> headers
 

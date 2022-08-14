@@ -48,6 +48,18 @@ module Web.Twain
     paramEither,
     paramMaybe,
     params,
+    queryParam,
+    queryParamMaybe,
+    queryParamEither,
+    queryParams,
+    pathParam,
+    pathParamMaybe,
+    pathParamEither,
+    pathParams,
+    cookieParam,
+    cookieParamMaybe,
+    cookieParamEither,
+    cookieParams,
     file,
     fileMaybe,
     files,
@@ -222,6 +234,99 @@ paramMaybe name = do
 -- | Get all parameters from query, path, cookie, and body (in that order).
 params :: ResponderM [Param]
 params = concatParams <$> parseBodyForm
+
+-- | Get a query parameter.
+--
+-- If no parameter is found, or parameter fails to parse, `next` is called
+-- which passes control to subsequent routes and middleware.
+queryParam :: ParsableParam a => Text -> ResponderM a
+queryParam name = do
+  pM <- fmap snd . L.find ((==) name . fst) <$> queryParams
+  maybe next (either (const next) pure . parseParam) pM
+
+-- | Get a query parameter or error if missing or parse failure.
+queryParamEither :: ParsableParam a => Text -> ResponderM (Either HttpError a)
+queryParamEither name = do
+  pM <- fmap snd . L.find ((==) name . fst) <$> queryParams
+  return $ case pM of
+    Nothing ->
+      Left $ HttpError status400 ("missing parameter: " <> T.unpack name)
+    Just p -> parseParam p
+
+-- | Get an optional query parameter.
+--
+-- Returns `Nothing` for missing parameter.
+-- Throws `HttpError` on parse failure.
+queryParamMaybe :: ParsableParam a => Text -> ResponderM (Maybe a)
+queryParamMaybe name = do
+  pM <- fmap snd . L.find ((==) name . fst) <$> queryParams
+  return $ maybe Nothing (rightToMaybe . parseParam) pM
+
+-- | Get all query parameters.
+queryParams :: ResponderM [Param]
+queryParams = preqQueryParams <$> parseBodyForm
+
+-- | Get a path parameter.
+--
+-- If no parameter is found, or parameter fails to parse, `next` is called
+-- which passes control to subsequent routes and middleware.
+pathParam :: ParsableParam a => Text -> ResponderM a
+pathParam name = do
+  pM <- fmap snd . L.find ((==) name . fst) <$> pathParams
+  maybe next (either (const next) pure . parseParam) pM
+
+-- | Get a path parameter or error if missing or parse failure.
+pathParamEither :: ParsableParam a => Text -> ResponderM (Either HttpError a)
+pathParamEither name = do
+  pM <- fmap snd . L.find ((==) name . fst) <$> pathParams
+  return $ case pM of
+    Nothing ->
+      Left $ HttpError status400 ("missing parameter: " <> T.unpack name)
+    Just p -> parseParam p
+
+-- | Get an optional path parameter.
+--
+-- Returns `Nothing` for missing parameter.
+-- Throws `HttpError` on parse failure.
+pathParamMaybe :: ParsableParam a => Text -> ResponderM (Maybe a)
+pathParamMaybe name = do
+  pM <- fmap snd . L.find ((==) name . fst) <$> pathParams
+  return $ maybe Nothing (rightToMaybe . parseParam) pM
+
+-- | Get all path parameters.
+pathParams :: ResponderM [Param]
+pathParams = preqPathParams <$> parseBodyForm
+
+-- | Get a cookie parameter.
+--
+-- If no parameter is found, or parameter fails to parse, `next` is called
+-- which passes control to subsequent routes and middleware.
+cookieParam :: ParsableParam a => Text -> ResponderM a
+cookieParam name = do
+  pM <- fmap snd . L.find ((==) name . fst) <$> cookieParams
+  maybe next (either (const next) pure . parseParam) pM
+
+-- | Get a cookie parameter or error if missing or parse failure.
+cookieParamEither :: ParsableParam a => Text -> ResponderM (Either HttpError a)
+cookieParamEither name = do
+  pM <- fmap snd . L.find ((==) name . fst) <$> cookieParams
+  return $ case pM of
+    Nothing ->
+      Left $ HttpError status400 ("missing parameter: " <> T.unpack name)
+    Just p -> parseParam p
+
+-- | Get an optional cookie parameter.
+--
+-- Returns `Nothing` for missing parameter.
+-- Throws `HttpError` on parse failure.
+cookieParamMaybe :: ParsableParam a => Text -> ResponderM (Maybe a)
+cookieParamMaybe name = do
+  pM <- fmap snd . L.find ((==) name . fst) <$> cookieParams
+  return $ maybe Nothing (rightToMaybe . parseParam) pM
+
+-- | Get all cookie parameters.
+cookieParams :: ResponderM [Param]
+cookieParams = preqCookieParams <$> parseBodyForm
 
 -- | Get uploaded `FileInfo`.
 --
