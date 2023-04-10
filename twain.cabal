@@ -47,7 +47,7 @@ library
     , http2 >=1.0.0 && <3.3.0
     , text >=1.2.3 && <3
     , time >=1.8 && <2
-    , transformers >=0.5.6 && <0.6
+    , transformers >=0.5.6 && <0.7
     , vault ==0.3.*
     , wai ==3.2.*
     , wai-extra >=3.0 && <3.2
