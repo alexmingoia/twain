@@ -1,5 +1,19 @@
 # Change Log
 
+## 2.1.2.0 [2023-04-10]
+
+Bump version bounds for transformers so Twain can be built with GHC 9.6.1
+
+## 2.1.1.0 [2022-08-14]
+
+Add getters for query, path, and cookie params.
+
+## 2.1.0.0 [2022-04-22]
+
+- Remove ghc flag and add default-language.
+- Add tests
+- Add CSS response
+
 ## 2.0.0.0 [2022-01-09]
 
 Simplify API to decompose routes into WAI middleware.
