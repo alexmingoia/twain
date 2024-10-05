@@ -125,8 +125,6 @@ wrapParseErr (HTTP2Exception (ErrorCode code)) = do
       errorMsg = unpack $ decodeUtf8 statusMsg
   throwIO $ HttpError status errorMsg
 
-wrapErr :: IO a -> IO a
-wrapErr action = handle wrapMaxReqErr $ handle wrapParseErr action 
 
 parseCookieParams :: Request -> [Param]
 parseCookieParams req =
