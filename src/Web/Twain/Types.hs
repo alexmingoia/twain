@@ -20,6 +20,7 @@ import Network.HTTP.Types (Status, status400)
 import Network.Wai (Middleware, Request, Response, pathInfo)
 import Network.Wai.Parse (File, ParseRequestBodyOptions)
 import Numeric.Natural
+import Network.HTTP2.Client (ErrorCode(..))
 
 -- | `ResponderM` is an Either-like monad that can "short-circuit" and return a
 -- response, or pass control to the next middleware. This provides convenient
