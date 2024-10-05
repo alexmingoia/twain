@@ -123,12 +123,7 @@ wrapParseErr (HTTP2Exception (ErrorCode code)) = do
   throwIO $ HttpError status errorMsg
 
 wrapErr :: IO a -> IO a
-wrapErr action = handle wrapMaxReqErr $ handle wrapParseErr action
-  where
-    wrapMaxReqErr :: RequestSizeException -> IO a
-    wrapMaxReqErr (RequestSizeException max) =
-      throwIO $ HttpError status413 $
-        "Request body size larger than " ++ show max ++ " bytes."
+wrapErr action = handle wrapMaxReqErr $ handle wrapParseErr action 
 
 toErrorCode :: Word32 -> ErrorCode
 toErrorCode = ErrorCode
