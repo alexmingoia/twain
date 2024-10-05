@@ -108,6 +108,9 @@ parseBodyJson = do
           setRequest $ req {vault = V.insert parsedReqKey preq' (vault req)}
           return json
 
+wrapErr :: IO a -> IO a
+wrapErr = handle wrapMaxReqErr . handle wrapParseErr
+
 wrapMaxReqErr :: RequestSizeException -> IO a
 wrapMaxReqErr (RequestSizeException max) =
   throwIO $ HttpError status413 $
