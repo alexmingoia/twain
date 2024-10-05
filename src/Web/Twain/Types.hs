@@ -14,6 +14,7 @@ import Data.String (IsString, fromString)
 import Data.Text as T
 import Data.Text.Encoding
 import qualified Data.Text.Lazy as TL
+import Data.Typeable (Typeable)
 import Data.Word
 import Network.HTTP.Types (Status, status400)
 import Network.Wai (Middleware, Request, Response, pathInfo)
@@ -181,3 +182,8 @@ readEither t = case [x | (x, "") <- reads (T.unpack t)] of
   [x] -> Right x
   [] -> Left $ HttpError status400 "readEither: no parse"
   _ -> Left $ HttpError status400 "readEither: ambiguous parse"
+
+data HTTP2Exception = HTTP2Exception ErrorCode
+  deriving (Show, Typeable)
+
+instance Exception HTTP2Exception
