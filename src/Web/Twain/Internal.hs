@@ -24,7 +24,6 @@ import System.IO.Unsafe (unsafePerformIO)
 import Web.Cookie (SetCookie, parseCookiesText, renderSetCookie)
 import Web.Twain.Types
 import Network.HTTP2.Client (HTTP2Error (..), ErrorCode(..))
-import Data.Word (Word32)
 import qualified Data.ByteString.Char8 as BC
 
 parsedReqKey :: V.Key ParsedRequest
