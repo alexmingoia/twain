@@ -128,15 +128,6 @@ wrapParseErr (HTTP2Exception (ErrorCode code)) = do
 wrapErr :: IO a -> IO a
 wrapErr action = handle wrapMaxReqErr $ handle wrapParseErr action 
 
-toErrorCode :: Word32 -> ErrorCode
-toErrorCode = ErrorCode
-
-fromErrorCode :: ErrorCode -> Word32
-fromErrorCode (ErrorCode w) = w
-
-throwHTTP2Error :: ErrorCode -> IO a
-throwHTTP2Error = throwIO . HTTP2Exception
-
 parseCookieParams :: Request -> [Param]
 parseCookieParams req =
   let headers = snd <$> L.filter ((==) hCookie . fst) (requestHeaders req)
