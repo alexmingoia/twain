@@ -1,6 +1,6 @@
 module Web.Twain.Internal where
 
-import Control.Exception (handle, throwIO)
+import Control.Exception (Exception, handle, throwIO)
 import Control.Monad (join)
 import Control.Monad.Catch (throwM, try)
 import Control.Monad.IO.Class (liftIO)
@@ -16,13 +16,15 @@ import Data.Text.Encoding
 import qualified Data.Vault.Lazy as V
 import Data.Word (Word64)
 import Network.HTTP.Types (Method, hCookie, mkStatus, status204, status400, status413, status500)
-import Network.HTTP2.Frame (ErrorCodeId (..), HTTP2Error (..))
+import Network.HTTP2.Frame (ErrorCodeId (..))
 import Network.Wai (Application, Middleware, Request (..), lazyRequestBody, queryString, requestHeaders, requestMethod, responseLBS)
 import Network.Wai.Parse (File, ParseRequestBodyOptions, lbsBackEnd, noLimitParseRequestBodyOptions, parseRequestBodyEx)
 import Network.Wai.Request (RequestSizeException (..), requestSizeCheck)
 import System.IO.Unsafe (unsafePerformIO)
 import Web.Cookie (SetCookie, parseCookiesText, renderSetCookie)
 import Web.Twain.Types
+import Network.HTTP2.Client (HTTP2Error (..), ErrorCode(..))
+import qualified Data.ByteString.Char8 as BC
 
 parsedReqKey :: V.Key ParsedRequest
 parsedReqKey = unsafePerformIO V.newKey
@@ -105,6 +107,7 @@ parseBodyJson = do
           setRequest $ req {vault = V.insert parsedReqKey preq' (vault req)}
           return json
 
+wrapErr :: IO a -> IO a
 wrapErr = handle wrapMaxReqErr . handle wrapParseErr
 
 wrapMaxReqErr :: RequestSizeException -> IO a
@@ -112,13 +115,15 @@ wrapMaxReqErr (RequestSizeException max) =
   throwIO $ HttpError status413 $
     "Request body size larger than " <> show max <> " bytes."
 
-wrapParseErr :: HTTP2Error -> IO a
-wrapParseErr (ConnectionError (UnknownErrorCode code) msg) = do
-  let msg' = unpack $ decodeUtf8 msg
-  throwIO $ HttpError (mkStatus (fromIntegral code) msg) msg'
-wrapParseErr (ConnectionError _ msg) = do
-  let msg' = unpack $ decodeUtf8 msg
-  throwIO $ HttpError status500 msg'
+
+wrapParseErr :: HTTP2Exception -> IO a
+wrapParseErr (HTTP2Exception (ErrorCode code)) = do
+  let statusCode = fromIntegral code
+      statusMsg = BC.pack $ "HTTP/2 error: " ++ show code
+      status = mkStatus statusCode statusMsg
+      errorMsg = unpack $ decodeUtf8 statusMsg
+  throwIO $ HttpError status errorMsg
+
 
 parseCookieParams :: Request -> [Param]
 parseCookieParams req =
