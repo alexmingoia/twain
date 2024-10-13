@@ -1,5 +1,9 @@
 # Change Log
 
+## 2.2.0.0 [2024-10-12]
+
+Bump version bounds for http2 to >=5.0 && <5.4
+
 ## 2.1.2.0 [2023-04-10]
 
 Bump version bounds for transformers so Twain can be built with GHC 9.6.1
