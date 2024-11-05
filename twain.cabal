@@ -5,7 +5,7 @@ cabal-version: 2.2
 -- see: https://github.com/sol/hpack
 
 name:           twain
-version:        2.2.0.0
+version:        2.2.0.1
 synopsis:       Tiny web application framework for WAI.
 description:    Twain is tiny web application framework for WAI. It provides routing, parameter parsing, and an either-like monad for composing responses.
 category:       Web
@@ -17,7 +17,7 @@ copyright:      2021 Alexander C. Mingoia
 license:        BSD-3-Clause
 license-file:   LICENSE
 build-type:     Simple
-extra-source-files:
+extra-doc-files:
     README.md
     changelog.md
 
