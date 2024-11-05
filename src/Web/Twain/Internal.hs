@@ -11,7 +11,7 @@ import qualified Data.ByteString.Lazy as BL
 import Data.Int
 import Data.List as L
 import Data.Maybe (fromMaybe)
-import Data.Text as T
+import qualified Data.Text as T
 import Data.Text.Encoding
 import qualified Data.Vault.Lazy as V
 import Data.Word (Word64)
@@ -121,7 +121,7 @@ wrapParseErr (HTTP2Exception (ErrorCode code)) = do
   let statusCode = fromIntegral code
       statusMsg = BC.pack $ "HTTP/2 error: " ++ show code
       status = mkStatus statusCode statusMsg
-      errorMsg = unpack $ decodeUtf8 statusMsg
+      errorMsg = T.unpack $ decodeUtf8 statusMsg
   throwIO $ HttpError status errorMsg
 
 

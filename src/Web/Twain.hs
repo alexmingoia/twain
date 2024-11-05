@@ -114,7 +114,8 @@ import qualified Data.CaseInsensitive as CI
 import Data.Either.Combinators (rightToMaybe)
 import qualified Data.List as L
 import Data.Maybe (fromMaybe)
-import Data.Text as T
+import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Text.Encoding
 import Data.Time
 import qualified Data.Vault.Lazy as V
